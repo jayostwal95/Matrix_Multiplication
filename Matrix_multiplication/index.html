@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Matrix Multiplication</title>
+    <p>Assignment 3 Part 2</p>
+    <style>
+      body {
+        text-align: center;
+        background-color: #98AFC7;
+      }
+
+      .chart {
+        padding-top: 80px;
+        margin: auto;
+      }
+      .visual-container {
+        box-shadow: 0 5px 14px 0px rgba(0,255,255);
+        display: inline-block;
+        height: 720px;
+        width: 720px;
+        margin: 20px;
+        background-color: cyan;
+      }
+
+      .controls-container {
+        height: 120px;
+      }
+
+      .slider {
+        -webkit-appearance: none;
+        display: inline-block;
+        width: 26px;
+        height: 8px;
+        border-radius: 3px;
+        background: #d3d3d3;
+        margin: 0 auto;
+        outline: none;
+        opacity: 0.8;
+        -webkit-transition: 0.2s;
+        transition: opacity 0.2s;
+      }
+
+      /* Mouse-over effects */
+      .slider:hover {
+        opacity: 1;
+        /* Fully shown on mouse-over */
+      }
+
+      .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 9px;
+        height: 18px;
+        border-radius: 40%;
+        background: black;
+        cursor: pointer;
+      }
+
+      .slider::-moz-range-thumb {
+        width: 9px;
+        height: 18px;
+        border-radius: 40%;
+        background: red;
+        cursor: pointer;
+      }
+
+      .slider {
+        stroke: white;
+      }
+
+      .track-inset {
+        stroke: white;
+        stroke-width: 8px;
+      }
+
+      .track-overlay {
+        pointer-events: stroke;
+        stroke-width: 20px;
+        stroke: transparent;
+        cursor: pointer;
+      }
+
+      .handle {
+        fill: black;
+        stroke: #000;
+        stroke-opacity: 0.5;
+        stroke-width: 0px;
+      }
+
+      .slider-labels {
+        text-anchor: middle;
+        font-family: "Impact";
+        font-size: 12px;
+        font-weight: bold;
+        fill: black;
+      }
+
+      .matrix-node {
+        stroke: black;
+        stroke-width: 3px;
+      }
+
+      .memory-node {
+        stroke: black;
+        stroke-width: 0.7px;
+      }
+
+      .play-stop-btn {
+        fill: black;
+        cursor: pointer;
+      }
+
+      .play-stop-text {
+        fill: red;
+        font-weight: bold;
+        text-anchor: middle;
+        font-family: "Impact";
+        cursor: pointer;
+      }
+      .mode-toggle-text-0,
+      .mode-toggle-text-1 {
+        font-weight: bold;
+        font-family: "Impact";
+        cursor: pointer;
+      }
+
+      .line {
+        fill: none;
+        stroke-width: 5px;
+      }
+
+      .tooltip {
+        position: fixed;
+        z-index: 999;
+        left: 0;
+        top: 0;
+        padding: 0.25em 0.5em;
+        background: rgba(255, 255, 255, 1);
+        pointer-events: none;
+        display: none;
+        font-family: Impact;
+        text-align: start;
+        font-size: 0.8em;
+        box-shadow: 0 4px 12px 0px rgba(0,0,0,.25);
+      }
+
+      .tooltip-title {
+        font-weight: bold;
+      }
+
+      .tick > line {
+        display: none;
+      }
+
+      .domain {
+        display: none;
+      }
+
+      .axis-label {
+        font-size: 1em;
+        font-weight: bold;
+        text-anchor: middle;
+        font-family: Impact;
+      }
+
+      .legend-label {
+        font-family: Impact;
+        font-size: 1em;
+        font-weight: bold;
+      }
+
+      .chart-title {
+                font-family: Impact;
+        font-size: 1.5em;
+        font-weight: bold;
+      }
+    </style>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+  </head>
+
+  <body>
+    <div class="tooltip">
+      <div class="tooltip-title"></div>
+      <div class="naive-info"></div>
+      <div class="transpose-info"></div>
+      <div class="tiled-info"></div>
+    </div>
+    <div class="chart">
+      <div id="matrix-view" class="visual-container"></div>
+      <div id="graph-view" class="visual-container"></div>
+      <div class="controls-container"></div>
+    </div>
+
+    <script>
+      // Global Variables:
+      var widthChart = 720;
+      var heightChart = 720;
+      var sliderMargin = { left: 260, right: 30 };
+      var graphMargin = { top: 60, right: 40, bottom: 80, left: 60 };
+      var minMatrixN = 1;
+      var maxMatrixN = 20;
+      var playMode = 0;
+      var mode = "naive";
+      var xScale, graphData;
+      var currentStep = 0;
+
+      // Sliders;
+      var currentN = 1;
+      var currentM = 1;
+      var currentP = 1;
+      var n = currentM * currentM * currentP;
+
+      var chartA = d3
+        .select("#matrix-view")
+        .append("svg")
+        .attr("width", widthChart)
+        .attr("height", heightChart)
+        .append("g")
+        .attr("transform", "translate(0,0)");
+
+      var sliderX = d3
+        .scaleLinear()
+        .domain([minMatrixN, maxMatrixN])
+        .range([sliderMargin.left, widthChart - sliderMargin.right])
+        .clamp(true);
+
+              chartA
+        .append("text")
+        .attr("class", "chart-title")
+        .text("Matrix and Memory view")
+        .attr("fill", "black")
+        .attr("x", 30)
+        .attr("y", 30);
+
+
+
+      chartA
+        .append("rect")
+        .attr("x", 10)
+        .attr("y", 100)
+        .attr("rx", 10)
+        .attr("width", 55)
+        .attr("height", 30)
+        .attr("fill", "black")
+        .style("cursor", "pointer")
+        .on("click", function() {
+          toggleMode();
+        });
+
+      var modeToggle = chartA
+        .append("rect")
+        .attr("x", 20)
+        .attr("y", 105)
+        .attr("rx", 4)
+        .attr("width", 20)
+        .attr("height", 20)
+        .attr("fill", "red")
+        .style("cursor", "pointer")
+        .on("click", function() {
+          toggleMode();
+        });
+
+      chartA
+        .append("text")
+        .attr("class", "mode-toggle-text-0")
+        .text("Mode:")
+        .attr("fill", "black")
+        .attr("x", 70)
+        .attr("y", 110);
+
+      chartA
+        .append("text")
+        .attr("class", "mode-toggle-text-1")
+        .text("Naive")
+        .attr("fill", "black")
+        .attr("x", 75)
+        .attr("y", 130);
+
+      var sliderNSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 70 + ")");
+
+      sliderNSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text("n: ")
+        .attr("x", 220);
+
+      var nLabel = sliderNSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text(currentN)
+        .attr("x", 240);
+
+      var sliderN = sliderNSVG.append("g").attr("class", "slider");
+
+      sliderN
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderN.interrupt();
+            })
+            .on("start drag", function() {
+              currentN = Math.round(sliderX.invert(d3.event.x));
+              handleN.attr("x", function() {
+                return sliderX(currentN);
+              });
+              nLabel.text(currentN);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleN = sliderN
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentN))
+        .attr("width", "15px")
+        .attr("height", "19px");
+
+      var sliderMSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 120 + ")");
+
+      sliderMSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.5em")
+        .text("m: ")
+        .attr("x", 230);
+
+      var mLabel = sliderMSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.5em")
+        .text(currentM)
+        .attr("x", 245);
+
+      var sliderM = sliderMSVG.append("g").attr("class", "slider");
+
+      sliderM
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderM.interrupt();
+            })
+            .on("start drag", function() {
+              currentM = Math.round(sliderX.invert(d3.event.x));
+              handleM.attr("x", function() {
+                return sliderX(currentM);
+              });
+              mLabel.text(currentM);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleM = sliderM
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentM))
+        .attr("width", "16px")
+        .attr("height", "20px");
+
+      var sliderPSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 0 + "," + 170 + ")");
+
+      sliderPSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text("p: ")
+        .attr("x", 230);
+
+      var pLabel = sliderPSVG
+        .append("text")
+        .attr("class", "slider-labels")
+        .attr("dy", "0.3em")
+        .text(currentP)
+        .attr("x", 245);
+
+      var sliderP = sliderPSVG.append("g").attr("class", "slider");
+
+      sliderP
+        .append("line")
+        .attr("class", "track")
+        .attr("x1", sliderX.range()[0])
+        .attr("x2", sliderX.range()[1])
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-inset")
+        .select(function() {
+          return this.parentNode.appendChild(this.cloneNode(true));
+        })
+        .attr("class", "track-overlay")
+        .call(
+          d3
+            .drag()
+            .on("start.interrupt", function() {
+              sliderP.interrupt();
+            })
+            .on("start drag", function() {
+              currentP = Math.round(sliderX.invert(d3.event.x));
+              handleP.attr("x", function() {
+                return sliderX(currentP);
+              });
+              pLabel.text(currentP);
+              updateBoxes();
+              updateBoxes();
+              reset();
+            })
+        );
+
+      var handleP = sliderP
+        .insert("rect", ".track-overlay")
+        .attr("class", "handle")
+        .attr("y", "-10")
+        .attr("x", sliderX(currentP))
+        .attr("width", "16px")
+        .attr("height", "20px");
+
+      
+      var boxWidth = 200;
+      var boxHeight = 200;
+      var boxASVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 220 + ")");
+
+
+      var boxBSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + (boxWidth + 40) + "," + 220 + ")");
+
+   
+
+      var boxCSVG = chartA
+        .append("g")
+        .attr(
+          "transform",
+          "translate(" + (2 * boxWidth + 70) + "," + 220 + ")"
+        );
+
+      chartA
+        .append("image")
+        .attr("xlink:href", "images/cross.png")
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("x", boxWidth + 17)
+        .attr("y", 220 + boxHeight / 2);
+
+      chartA
+        .append("image")
+        .attr("xlink:href", "images/equals.jpg")
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("x", 2 * boxWidth + 47)
+        .attr("y", 220 + boxHeight / 2);
+
+
+      var dataA = getMatrix(currentM, currentN);
+      var dataB = getMatrix(currentP, currentM);
+      var dataC = getMatrix(currentP, currentN);
+
+      xScaleM = d3
+        .scaleBand()
+        .domain([...Array(currentM).keys()])
+        .range([0, boxWidth]);
+
+      xScaleP = d3
+        .scaleBand()
+        .domain([...Array(currentP).keys()])
+        .range([0, boxWidth]);
+
+      yScaleN = d3
+        .scaleBand()
+        .domain([...Array(currentN).keys()])
+        .range([0, boxHeight]);
+
+      yScaleM = d3
+        .scaleBand()
+        .domain([...Array(currentM).keys()])
+        .range([0, boxHeight]);
+
+      var boxesA = boxASVG
+        .selectAll(".matrix-g")
+        .data(dataA)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesA
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#EBEBED")
+        .attr("x", function(d) {
+          return xScaleM(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleN.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleM.bandwidth();
+        });
+
+      var boxesB = boxBSVG
+        .selectAll(".matrix-g")
+        .data(dataB)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleM(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesB
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#EBEBED")
+        .attr("x", function(d) {
+          return xScaleP(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleM.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleP.bandwidth();
+        });
+
+      var boxesC = boxCSVG
+        .selectAll(".matrix-g")
+        .data(dataC)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        })
+        .selectAll(".matrix-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      boxesC
+        .enter()
+        .append("rect")
+        .attr("class", "matrix-node")
+        .attr("fill", "#EBEBED")
+        .attr("x", function(d) {
+          return xScaleP(d.key);
+        })
+        .attr("height", function(d) {
+          return yScaleN.bandwidth();
+        })
+        .attr("width", function(d) {
+          return xScaleP.bandwidth();
+        });
+
+      // Memory View:
+      var memoryX = 100;
+      var memoryY = 1;
+      var memoryA = getMatrix(memoryX, memoryY);
+      var memoryB = getMatrix(memoryX, memoryY);
+      var memoryC = getMatrix(memoryX, memoryY);
+      var memoryWidth = widthChart - 20;
+      var memoryHeight = 10;
+
+      var xScaleMemory = d3
+        .scaleBand()
+        .domain([...Array(memoryX).keys()])
+        .range([0, memoryWidth]);
+
+      var yScaleMemory = d3
+        .scaleBand()
+        .domain([...Array(memoryY).keys()])
+        .range([0, memoryHeight]);
+
+      var memoryASVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 460 + ")");
+
+      var memoryBSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 500 + ")");
+
+      var memoryCSVG = chartA
+        .append("g")
+        .attr("transform", "translate(" + 10 + "," + 540 + ")");
+
+      var memoryAchart = memoryASVG
+        .selectAll(".memory-a-g")
+        .data(memoryA)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-a-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryAchart
+        .enter()
+        .append("circle")
+        .attr("class", "memory-node")
+        .attr("fill", "#EBEBED")
+        .attr("cx", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("r", function(d) {
+          return yScaleMemory.bandwidth()/4
+        })
+
+
+      var memoryBchart = memoryBSVG
+        .selectAll(".memory-b-g")
+        .data(memoryB)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-b-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryBchart
+        .enter()
+        .append("circle")
+        .attr("class", "memory-node")
+        .attr("fill", "#EBEBED")
+        .attr("cx", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("r", function(d) {
+          return yScaleMemory.bandwidth()/4
+        })
+
+
+      var memoryCchart = memoryCSVG
+        .selectAll(".memory-c-g")
+        .data(memoryC)
+        .enter()
+        .append("g")
+        .attr("class", "matrix-c-g")
+        .attr("transform", function(d) {
+          return "translate(0," + yScaleMemory(d.key) + ")";
+        })
+        .selectAll(".memory-node")
+        .data(function(d) {
+          return d.values;
+        });
+
+      memoryCchart
+        .enter()
+        .append("circle")
+        .attr("class", "memory-node")
+        .attr("fill", "#EBEBED")
+        .attr("cx", function(d) {
+          return xScaleMemory(d.key);
+        })
+        .attr("r", function(d) {
+          return yScaleMemory.bandwidth()/4
+        })
+  
+
+      // Graph View:
+      d3.csv("runningtime.csv").then(function(data) {
+        graphData = data;
+        var chartB = d3
+          .select("#graph-view")
+          .append("svg")
+          .attr("width", widthChart)
+          .attr("height", heightChart)
+          .append("g")
+          .attr("transform", "translate(" + 0 + "," + 0 + ")");
+
+         chartB
+        .append("text")
+        .attr("class", "chart-title")
+        .text("Graph View")
+        .attr("fill", "black")
+        .attr("x", 20)
+        .attr("y", 30);
+
+        var n = graphData.length;
+
+        naive = [];
+        transpose = [];
+        tiled = [];
+        n_list = [];
+        graphData.forEach(function(v) {
+          naive.push(+v["naive"]);
+          transpose.push(+v["transpose"]);
+          tiled.push(+v["tiled"]);
+          n_list.push(+v["N"]);
+        });
+
+        var maxVal = d3.max([
+          d3.max(naive),
+          d3.max(transpose),
+          d3.max(tiled)
+        ]);
+
+        console.log(maxVal)
+
+        xScale = d3
+          .scaleLinear()
+          .domain([0, n - 1]) // input
+          .range([graphMargin.left, widthChart - graphMargin.right]); // output
+
+        yScale = d3
+          .scaleLinear()
+          .domain([0, maxVal]) // input
+          .range([heightChart - graphMargin.bottom, graphMargin.top]); // output
+
+        line = d3
+          .line()
+          .x(function(d, i) {
+            return xScale(i);
+          })
+          .y(function(d) {
+            return yScale(d);
+          })
+          .curve(d3.curveBasis);
+
+        chartB
+          .append("g")
+          .attr("class", "x-axis")
+          .attr(
+            "transform",
+            "translate(0," + (heightChart - graphMargin.bottom) + ")"
+          )
+          .call(
+            d3.axisBottom(xScale).tickFormat(function(d, i) {
+              return n_list[i];
+            })
+          );
+
+        chartB
+          .append("text")
+          .attr("class", "axis-label")
+          .attr(
+            "transform",
+            "translate(" +
+              (widthChart + graphMargin.left) / 2 +
+              " ," +
+              (heightChart - graphMargin.bottom + 40) +
+              ")"
+          )
+          .text("Value of N");
+
+        chartB
+          .append("g")
+          .attr("class", "y-axis")
+          .attr("transform", "translate(" + graphMargin.left + ",0)")
+          .call(d3.axisLeft(yScale));
+
+        chartB
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("transform", "rotate(-90)")
+          .attr("y", graphMargin.left/2 - 10)
+          .attr("x", 0 - heightChart / 2)
+          .attr("dy", "1em")
+          .text("Seconds");
+
+        chartB
+          .append("path")
+          .datum(naive)
+          .attr("class", "line line-naive")
+          .style("stroke", "#E3655B")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        chartB
+          .append("path")
+          .datum(transpose)
+          .attr("class", "line line-transpose")
+          .style("stroke", "#CFD186")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        chartB
+          .append("path")
+          .datum(tiled)
+          .attr("class", "line line-tiled")
+          .style("stroke", "#5B8C5A")
+          .attr("d", function(d, i) {
+            return line(d, i);
+          });
+
+        tipBox = chartB
+          .append("rect")
+          .attr("x", graphMargin.left)
+          .attr("y", graphMargin.top)
+          .attr("width", widthChart - graphMargin.right - graphMargin.left)
+          .attr("height", heightChart - graphMargin.top - graphMargin.bottom)
+          .attr("fill-opacity", 0)
+          .on("mousemove", drawTooltip)
+          .on("mouseout", hideTooltip)
+          .style("stroke", "black")
+          .style("stroke-width", 2);
+
+        tooltipLine = chartB.append("line");
+
+        legendText = ["naive", "transpose", "tiled"];
+
+        var legendRectSize = 20;
+        var legendSpacing = 18;
+
+        legend = chartB
+          .selectAll(".legend")
+          .data(legendText)
+          .enter()
+          .append("g")
+          .attr("class", "legend")
+          .attr("transform", function(d, i) {
+            var height = legendRectSize + legendSpacing;
+            var offset = -350;
+            var horz = graphMargin.left + 40
+            var vert = heightChart - 110 + i * height + offset;
+            return "translate(" + horz + "," + vert + ")";
+          })
+          .style("cursor", "pointer")
+          .on("click", function(d) {
+            updateGraph(d);
+          });
+
+        legend
+          .append("circle")
+          .attr("cx", 0)
+          .attr("cy", 10)
+          .attr("id", function(d) {
+            return "legend-rect-" + d;
+          })
+          .attr("r", legendRectSize/2)
+          .style("stroke", "black")
+          .style("stroke-width", 2)
+          .attr("fill", function(d, i) {
+            if (i === 0) {
+              return "#E3655B";
+            }
+            if (i === 1) {
+              return "#CFD186";
+            }
+            if (i === 2) {
+              return "#5B8C5A";
+            }
+          });
+
+        legend
+          .append("text")
+          .attr("class", "legend-label")
+          .attr("x", 25)
+          .attr("y", 13)
+          .attr("id", function(d) {
+            return "legend-label-" + d;
+          })
+          .text(function(d) {
+            return d;
+          });
+      });
+
+      // Controls:
+      var controlSVG = d3
+        .select(".controls-container")
+        .append("svg")
+        .attr("width", 200)
+        .attr("height", 100)
+        .append("g")
+        .attr("transform", "translate(0,0)")
+        .on("mouseover", function() {
+          d3.select(".play-stop-btn").style("fill", "black");
+        })
+        .on("mouseout", function() {
+          d3.select(".play-stop-btn").style("fill", "#565657");
+        });
+
+      controlSVG
+        .append("rect")
+        .attr("class", "play-stop-btn")
+        .attr("y", 20)
+        .attr("x", 50)
+        .attr("rx", 20)
+        .style("stroke", "black")
+        .style("stroke-width", 3)
+        .attr("width", 100)
+        .attr("height", 50)
+        .on("click", function() {
+          if (playMode === 0) {
+            playMode = 1;
+            currentStep = 0;
+            d3.select(".play-stop-text").text("stop");
+            timer = setInterval(function() {
+              if (currentStep < n) {
+                step();
+                currentStep += 1;
+              } else {
+                clearInterval(timer);
+                playMode = 0;
+                d3.select(".play-stop-text").text("Play");
+              }
+            }, 700);
+          } else {
+            clearInterval(timer);
+            playMode = 0;
+            d3.select(".play-stop-text").text("Play");
+          }
+        });
+
+      controlSVG
+        .append("text")
+        .attr("class", "play-stop-text")
+        .text("play")
+        .attr("y", 50)
+        .attr("x", 100)
+
+
+      function updateGraph(d) {
+        if (d3.select("#legend-rect-" + d).attr("opacity") == 0.5) {
+          d3.select("#legend-rect-" + d).attr("opacity", 1);
+          d3.select("#legend-label-" + d).attr("opacity", 1);
+          d3.select(".line-" + d).attr("opacity", 1);
+          d3.select("." + d + "-info").style("display", "");
+        } else {
+          d3.select("#legend-rect-" + d).attr("opacity", 0.5);
+          d3.select("#legend-label-" + d).attr("opacity", 0.5);
+          d3.select(".line-" + d).attr("opacity", 0);
+          d3.select("." + d + "-info").style("display", "none");
+        }
+      }
+
+      function hideTooltip() {
+        d3.select(".tooltip").style("display", "none");
+        tooltipLine.style("display", "none");
+      }
+
+      function drawTooltip() {
+        let x = d3.event.clientX;
+        let y = d3.event.clientY;
+        let xInvert = Math.floor(xScale.invert(x) - 11);
+
+        d3.select(".tooltip").style(
+          "transform",
+          `translate(${x + 10}px,${y + 10}px)`
+        );
+
+
+        tooltipLine
+          .style("stroke", "grey")
+          .style("display", "")
+          .style("stroke-width", 2)
+          .style("stroke-dasharray", "3, 3")
+          .attr("x1", xScale(xInvert))
+          .attr("x2", xScale(xInvert))
+          .attr("y1", graphMargin.top)
+          .attr("y2", heightChart - graphMargin.bottom);
+
+        d3.select(".tooltip").style("display", "block");
+        d3.select(".tooltip-title").text("N: " + n_list[xInvert]);
+        d3.select(".naive-info").text(
+          "Naive: " + graphData[xInvert]["naive"] + " seconds"
+        );
+        d3.select(".transpose-info").text(
+          "Transpose: " + graphData[xInvert]["transpose"] + " seconds"
+        );
+        d3.select(".tiled-info").text(
+          "Tiled: " + graphData[xInvert]["tiled"] + " seconds"
+        );
+        
+
+
+      }
+
+      function toggleMode() {
+        if (mode === "naive") {
+          mode = "transpose";
+          modeToggle.attr("x", 40);
+          updateBoxes();
+          updateBoxes();
+          reset();
+          d3.select(".mode-toggle-text-1").text("transpose");
+        } else {
+          mode = "naive";
+          modeToggle.attr("x", 15);
+          updateBoxes();
+          updateBoxes();
+          reset();
+          d3.select(".mode-toggle-text-1").text("naive");
+        }
+      }
+
+      function reset() {
+        boxASVG.selectAll(".matrix-node").attr("fill", "#EBEBED");
+        boxBSVG.selectAll(".matrix-node").attr("fill", "#EBEBED");
+        boxCSVG.selectAll(".matrix-node").attr("fill", "#EBEBED");
+        memoryASVG.selectAll(".memory-node").attr("fill", "#EBEBED");
+        memoryBSVG.selectAll(".memory-node").attr("fill", "#EBEBED");
+        memoryCSVG.selectAll(".memory-node").attr("fill", "#EBEBED");
+      }
+
+      function step() {
+        // x is row
+        // y is column
+        // z is block element
+        var index = 0;
+        loop0: for (let i = 0; i < currentN; i++) {
+          loop1: for (let j = 0; j < currentP; j++) {
+            loop2: for (let k = 0; k < currentM; k++) {
+              if (index === currentStep) {
+                var x = i;
+                var y = j;
+                var z = k;
+                break loop0;
+              }
+              index++;
+            }
+          }
+        }
+
+        if (mode === "naive") {
+          y_next = currentStep;
+          if (y_next + 1 > currentP) {
+            y_next = currentP - 1;
+          }
+
+          highlightMatrix("", x, dataA);
+          highlightMatrix(y, "", dataB);
+          highlightMatrix(y, x, dataC);
+          activateMatrix("", x, z, dataA);
+          activateMatrix(y, "", z, dataB);
+          activateMatrix(y, x, 0, dataC);
+          highlightMemory(x, "", memoryA, "row");
+          highlightMemory("", y, memoryB, "column");
+          highlightMemory(x, "", memoryC, "point");
+          activateMemory(x, "", z, memoryA, "row");
+          activateMemory("", y, z, memoryB, "column");
+          activateMemory(x, "", z, memoryC, "point");
+        } else {
+          // think wrong:
+          y_next = currentStep;
+          if (y_next + 1 > currentP) {
+            y_next = currentP - 1;
+          }
+          highlightMatrix("", x, dataA);
+          highlightMatrix("", y, dataB);
+          highlightMatrix(y, x, dataC);
+          activateMatrix("", x, z, dataA);
+          activateMatrix("", y, z, dataB);
+          activateMatrix(y, x, 0, dataC);
+          highlightMemory(x, "", memoryA, "row");
+          highlightMemory(y, "", memoryB, "row");
+          highlightMemory(x, "", memoryC, "point");
+          activateMemory(x, "", z, memoryA, "row");
+          activateMemory(y, "", z, memoryB, "row");
+          activateMemory(x, "", z, memoryC, "point");
+        }
+
+        update_charts();
+      }
+
+      function update_charts() {
+        boxASVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#E3655B";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 3;
+            } else {
+              return 2;
+            }
+          });
+        boxBSVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#CFD186";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 3;
+            } else {
+              return 2;
+            }
+          });
+        boxCSVG
+          .selectAll(".matrix-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#5B8C5A";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 3;
+            } else {
+              return 2;
+            }
+          });
+        memoryASVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#E3655B";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 1;
+            } else {
+              return 0.5;
+            }
+          });
+        memoryBSVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#CFD186";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 1;
+            } else {
+              return 0.5;
+            }
+          });
+        memoryCSVG
+          .selectAll(".memory-node")
+          .attr("fill", function(d) {
+            if (d.highlight === true) {
+              return "#5B8C5A";
+            } else {
+              return "#EBEBED";
+            }
+          })
+          .style("stroke-width", function(d) {
+            if (d.active === true) {
+              d3.select(this).moveToFront();
+              d3.select(this.parentNode).moveToFront();
+              return 1;
+            } else {
+              return 0.5;
+            }
+          });
+      }
+
+      function updateBoxes() {
+        n = currentN * currentP * currentM;
+
+        dataA = getMatrix(currentM, currentN);
+        if (mode === "naive") {
+          dataB = getMatrix(currentP, currentM);
+        } else {
+          dataB = getMatrix(currentM, currentP);
+        }
+        dataC = getMatrix(currentP, currentN);
+
+        xScaleM = d3
+          .scaleBand()
+          .domain([...Array(currentM).keys()])
+          .range([0, boxWidth]);
+
+        xScaleP = d3
+          .scaleBand()
+          .domain([...Array(currentP).keys()])
+          .range([0, boxWidth]);
+
+        yScaleN = d3
+          .scaleBand()
+          .domain([...Array(currentN).keys()])
+          .range([0, boxHeight]);
+
+        yScaleM = d3
+          .scaleBand()
+          .domain([...Array(currentM).keys()])
+          .range([0, boxHeight]);
+
+        yScaleP = d3
+          .scaleBand()
+          .domain([...Array(currentP).keys()])
+          .range([0, boxHeight]);
+
+        var gAUpdate = boxASVG.selectAll(".matrix-g").data(dataA);
+        //
+        var gBUpdate = boxBSVG.selectAll(".matrix-g").data(dataB);
+        var gCUpdate = boxCSVG.selectAll(".matrix-g").data(dataC);
+
+        gAUpdate.exit().remove();
+        //
+        gBUpdate.exit().remove();
+        gCUpdate.exit().remove();
+
+        gAUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+        //
+        gBUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+        gCUpdate
+          .enter()
+          .append("g")
+          .attr("class", "matrix-g");
+
+        var boxAUpdate = gAUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+        //
+        var boxBUpdate = gBUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+        var boxCUpdate = gCUpdate.selectAll(".matrix-node").data(function(d) {
+          return d.values;
+        });
+
+        boxAUpdate.exit().remove();
+        //
+        boxBUpdate.exit().remove();
+        boxCUpdate.exit().remove();
+
+        boxAUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+        //
+        boxBUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+        boxCUpdate
+          .enter()
+          .append("rect")
+          .attr("class", "matrix-node");
+
+        boxASVG.selectAll(".matrix-g").attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        });
+        //
+        if (mode === "naive") {
+          boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
+            return "translate(0," + yScaleM(d.key) + ")";
+          });
+        } else {
+          boxBSVG.selectAll(".matrix-g").attr("transform", function(d) {
+            return "translate(0," + yScaleP(d.key) + ")";
+          });
+        }
+
+        boxCSVG.selectAll(".matrix-g").attr("transform", function(d) {
+          return "translate(0," + yScaleN(d.key) + ")";
+        });
+
+        boxASVG
+          .selectAll(".matrix-node")
+          .attr("x", function(d) {
+            return xScaleM(d.key);
+          })
+          .attr("height", function(d) {
+            return yScaleN.bandwidth();
+          })
+          .attr("width", function(d) {
+            return xScaleM.bandwidth();
+          });
+        //
+        if (mode === "naive") {
+          boxBSVG
+            .selectAll(".matrix-node")
+            .attr("x", function(d) {
+              return xScaleP(d.key);
+            })
+            .attr("height", function(d) {
+              return yScaleM.bandwidth();
+            })
+            .attr("width", function(d) {
+              return xScaleP.bandwidth();
+            });
+        } else {
+          boxBSVG
+            .selectAll(".matrix-node")
+            .attr("x", function(d) {
+              return xScaleM(d.key);
+            })
+            .attr("height", function(d) {
+              return yScaleP.bandwidth();
+            })
+            .attr("width", function(d) {
+              return xScaleM.bandwidth();
+            });
+        }
+
+        boxCSVG
+          .selectAll(".matrix-node")
+          .attr("x", function(d) {
+            return xScaleP(d.key);
+          })
+          .attr("height", function(d) {
+            return yScaleN.bandwidth();
+          })
+          .attr("width", function(d) {
+            return xScaleP.bandwidth();
+          });
+      }
+
+      function activateMatrix(x, y, z, matrix) {
+        
+        index = 0;
+        matrix.forEach(function(v, i) {
+          v.values.forEach(function(w, j) {
+            w.active = false;
+            if (
+              (j === x && i === y) ||
+              (j === x && y === "") ||
+              (i === y && x === "")
+            ) {
+              if (index === z) {
+                w.active = true;
+              }
+              index++;
+            }
+          });
+        });
+      }
+
+      function activateMemory(x, y, z, memory, type) {
+        if (type === "row") {
+          index = 0;
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (j < (x + 1) * currentM && j >= x * currentM) {
+                if (index === z) {
+                  w.active = true;
+                }
+                index++;
+              }
+            });
+          });
+        }
+        if (type === "point") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (j === Math.floor(currentStep / currentM)) {
+                w.active = true;
+              }
+            });
+          });
+        }
+        if (type === "column") {
+          indices = [];
+          for (let i = 0; i < currentM; i++) {
+            indices.push(i * currentP + y);
+          }
+          index = 0;
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.active = false;
+              if (indices.indexOf(j) >= 0) {
+                if (index === z) {
+                  w.active = true;
+                }
+                index++;
+              }
+            });
+          });
+        }
+      }
+
+      function highlightMemory(x, y, memory, type) {
+        if (type === "row") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.highlight = false;
+              if (j < (x + 1) * currentM && j >= x * currentM) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+        if (type === "point") {
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              if (j === Math.floor(currentStep / currentM)) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+        if (type === "column") {
+          indices = [];
+          for (let i = 0; i < currentM; i++) {
+            indices.push(i * currentP + y);
+          }
+          memory.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.highlight = false;
+              if (indices.indexOf(j) >= 0) {
+                w.highlight = true;
+              }
+            });
+          });
+        }
+      }
+
+      function highlightMatrix(x, y, matrix, next = 0) {
+      
+        if (next === 0) {
+          matrix.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              w.highlight = false;
+
+              if (
+                (j === x && i === y) ||
+                (j === x && y === "") ||
+                (i === y && x === "")
+              ) {
+                w.highlight = true;
+              }
+            });
+          });
+        } else {
+          var added = 0;
+          matrix.forEach(function(v, i) {
+            v.values.forEach(function(w, j) {
+              if (added < next) {
+                w.highlight = true;
+                added += 1;
+              } else {
+                w.highlight = false;
+              }
+            });
+          });
+        }
+
+        return matrix;
+      }
+
+      function getMatrix(m, n) {
+       
+        result = [];
+        var mArray = [...Array(n).keys()];
+        var nArray = [...Array(m).keys()];
+        mArray.forEach(function(v) {
+          var obj = { key: v, values: [] };
+          nArray.forEach(function(w) {
+            obj.values.push({ key: w, highlight: false, active: false });
+          });
+          result.push(obj);
+        });
+        return result;
+      }
+
+      d3.selection.prototype.moveToFront = function() {
+        return this.each(function() {
+          this.parentNode.appendChild(this);
+        });
+      };
+    </script>
+  </body>
+</html>
